@@ -1,0 +1,10 @@
+config
+data
+.env
+*~
+config.template/faf-postal/config
+config.template/faf-ircd/ssl
+config.template/faf-java-api/pki/public.key
+config.template/faf-java-api/pki/secret.key
+config.template/faf-python-server/faf-server.pem
+

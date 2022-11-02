@@ -1,0 +1,4 @@
+[client]
+user = root
+password = the_db_root_password
+host = localhost
