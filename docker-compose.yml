@@ -196,7 +196,7 @@ services:
   #
   faf-java-api:
     container_name: faf-java-api
-    image: taforever/taf-java-api:v2.13.1-taf-0.15.0
+    image: taforever/taf-java-api:v2022.11.03
     #build:
     #  context: ..\faf-java-api
     #  dockerfile: Dockerfile
@@ -466,7 +466,7 @@ services:
     depends_on:
       - faf-init-volumes
     env_file: ./config/faf-content/faf-content.env
-    #ports:
+    #ports:             # uncomment for test deployments on localhost
     #  - "80:80"
     labels:
       - "traefik.enable=true"

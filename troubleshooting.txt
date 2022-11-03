@@ -1,3 +1,16 @@
+gvm8B2XLLvH1
+TAF Mautic User / mHXxDUk8fxB8d1crKDlKeddT
+
+ISSUE: archilinux docker daemon doesn't start
+SYMPTOM: $ journalctl -xeu docker.service
+  warning msg="Running modprobe bridge br_netfilter failed with message: modprobe: WARNING: Module bridge not found in directory /lib/modules/5.15.74-1-lts\nmodprobe: WARNING: Module br_netfilt
+RESOLUTION: reboot
+
+
+ISSUE: Access denied for user ‘root’@’localhost’
+RESOLUTION: dos2unix *EVERYTHING* including the .env files
+
+
 ISSUE: players have no avataars
 CAUSE: avatar images missing from https://content.taforever.com/taf/avatars
        - resolution: copy image files (eg core.png) to /opt/taf-stack/data/content/taf/avatars (then restart faf-java-api and faf-python-server?)
@@ -34,14 +47,36 @@ CAUSE:
 
 
 ISSUE: unable to register new user from taf website
-- "Error! Authentication failed; nested exception is javax.mail.AuthenticationFailedException: [EOF]"
-CAUSE: ???
-RESOLUTION: ???
+- Error! Failed messages: com.sun.mail.smtp.SMTPSendFailedException: 530 From/Sender name is not valid
+CAUSE: config/faf-java-api/faf-java-api.env:EMAIL_FROM_ADDRESS must be from the sites domain name. eg noreply@taforever.com
+
+
+ISSUE: unable to register new user from taf website
+- Error! The entered email address 'asdfasdf@asdfasdf.com' already has an associated account.
+- CAUSE: a user with address asdfasdf@asdfasdf.com already exists in table faf.login.email
+
+
+ISSUE: unable to change password from taf website
+- Error! PreparedStatementCallback; bad SQL grammar [UPDATE `faf-anope`.anope_db_NickCore SET pass = ? WHERE display = ?]; nested exception is java.sql.SQLSyntaxErrorException: Table 'faf-anope.anope_db_NickCore' doesn't exist
+CAUSE: anope database tables not created
+RESOLUTION:
+- ensure anope service is being run (distinct from unrealircd) and has db_sql_live module active
+- log into irc and issue a /msg NickServ REGISTER Password_here Email@address.here to cause anope to create the NickCore table
+
+
+ISSUE: unrealircd spammed with error logs:
+faf-unrealircd           | [channeldb] Error writing to temporary database file '/data/unrealircd/data/channel.db.4a4bf094.tmp': Could not open file: Permission denied (DATABASE NOT SAVED)
+faf-unrealircd           | [tkldb] Error writing to temporary database file '/data/unrealircd/data/tkl.db.738b0b64.tmp': Could not open file: Permission denied (DATABASE NOT SAVED)
+RESOLUTION: chmod 999:999 data/faf-unrealircd
 
 
 ISSUE: unable to register new user from taf website
 - "Username" field on website won't green up
 CAUSE: faf-java-api not up
+
+ISSUE: unable to register new user from taf website
+- Bad OAuth client credentials
+CAUSE: faf.oauth_clients.client_secret doesn't match config/faf-website/faf-website.env:OAUTH_CLIENT_SECRET
 
 ISSUE: unable to register new user from taf website
 - no response when click "register", eventually "bad gateway"
@@ -66,7 +101,7 @@ ISSUE: unable to register new user from taf website
 - faf-postal logs: ERROR -- #<Bunny::Session:0x7fb5cc1ca7d0 faf-postal@faf-rabbitmq:5672, vhost=/faf-postal, addresses=[faf-rabbitmq:5672]>: Authentication with RabbitMQ failed: 403 ACCESS_REFUSED
 CAUSE: rabbitmq is not configured
   - resolution:
-     $ docker exec faf-rabbitmq bash
+     $ docker exec -it faf-rabbitmq /bin/bash
      $ rabbitmqctl add_user faf-postal banana
      $ rabbitmqctl add_vhost /faf-postal
      $ rabbitmqctl set_permissions -p /faf-postal faf-postal ".*" ".*" ".*"
@@ -83,6 +118,11 @@ ISSUE: unable to register new user from taf website
 - postal web admin shows message in queue, but with status "soft fail".  "No SMTP servers were available".  "execution expired"
 CAUSE: cloud service blocks smtp
   - resolution: request support from cloud service to unblock smtp port 25 to allow server to send emails
+
+
+ISSUE: no connection to website from outside
+RESOLUTION: sudo ufw allow 443/tcp
+            sudo ufw allow 8001/tcp
 
 
 ISSUE: bad/outdated faf client download link on website

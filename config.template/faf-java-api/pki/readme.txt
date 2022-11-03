@@ -1,5 +1,5 @@
-ssh-keygen -t rsa -b 4096 -f private.key
+ssh-keygen -t rsa -b 4096 -f secret.key
 
 to generate:
   pki/public.key
-  pki/private.key
+  pki/secret.key

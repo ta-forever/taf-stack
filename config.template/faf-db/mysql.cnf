@@ -1,4 +1,4 @@
 [client]
 user = root
-password = the_db_root_password
+password = {{db_password}}
 host = localhost
