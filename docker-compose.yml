@@ -196,7 +196,7 @@ services:
   #
   faf-java-api:
     container_name: faf-java-api
-    image: taforever/taf-java-api:v2022.11.03
+    image: taforever/taf-java-api:v2022.11.04
     #build:
     #  context: ..\faf-java-api
     #  dockerfile: Dockerfile
