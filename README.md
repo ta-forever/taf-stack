@@ -1,13 +1,13 @@
-# FAF Stack
+# TAF Stack
 
-This repository aims to provide a ready-to-go Docker Compose file to set up a complete FAF stack (or parts of it) with
+This repository aims to provide a ready-to-go Docker Compose file to set up a complete TAF stack (or parts of it) with
 a single command.
 
 ## Structure
 
-The FAF stack uses two directories:
+The TAF stack uses two directories:
 
-* `config` contains the configuration files for all FAF services
+* `config` contains the configuration files for all TAF services
 * `data` contains data required or produced by the services
 
 Both directories are excluded by `.gitignore`. In fact, all files and directories are excluded if not explicitly un-ignored within `.gitignore`.
@@ -45,13 +45,62 @@ consistent naming.
     cp -R config.template config
     cp .env.template .env
 
-
 ### Recreate security keys (for production systems)
 
-In folder `config/faf-java-api/pki` replace `private.key` and `public.key` with new keys generated with `ssh-keygen -m pem`. The secret key needs to be in rsa format and the public key in ssh-rsa format (see config.template for examples).
+In folder `config/faf-java-api/pki` replace `secret.key` and `public.key` with new keys generated with `ssh-keygen -m pem`. The secret key needs to be in rsa format and the public key in ssh-rsa format (see config.template for examples).
 
 Hint: Some linux distros generate 3072 bit RSA keys by default (e.g. Arch). 3072 bit is not supported. Please use 2048 bit or 4096 bit key length.  
 
+In folder `config/faf-ircd/ssl`
+    $ openssl req -newkey rsa:2048 -new -nodes -x509 -days 3650 -keyout server.key.pem -out server.cert.pem
+
+In folder `config/faf-python-server/
+    $ openssl req -newkey rsa:2048 -new -nodes -x509 -days 3650 -keyout faf-server.pem
+
+
+### Create required data directories and initial content
+
+    $ mkdir -p data/content/avatars data/content/featured_mod_dropins data/content/galactic_war/scenarios data/content/game_logs data/content/gpgnet4ta data/content/maps data/content/replays
+    $ cp -r content.template/* data/content/
+
+    check docker-compose.yaml:faf-content to enable the ports 80 if running test server locally
+
+### Set various configs
+
+See a list of all the configs that still need to be set:
+
+    scripts/config-template-passwd.sh
+
+{{domain_name}}: taforever.com or taforever.localhost
+{{host_ip}}: public ip or 127.0.0.1 or even blank??
+{{dashboard_htpasswd}}:
+    use htpasswd to generate a hashed password for dashboard.taforever.com
+{{db_password}}:
+    assign a plaintext password for various db user accounts
+{{irc_cloak_key_0}}:
+{{irc_cloak_key_1}}
+{{irc_cloak_key_2}}
+    assign a plaintext password for the IRC cloak key
+{{irc_opers_user_password}}:
+    assign a plaintext password for the IRC opers user/administrator
+{{irc_services_password}}:
+    assign a plaintext password for anope services to connect to unrealircd
+{{mautic_client_secret}}:
+    after configuring mautic set this to the assigned password
+    not actually needed, just skip configuring mautic.
+    maybe set the password to some dummy value if {{}} causes problems.
+{{mindmax_dot_com_licence_key}}:
+    go to mindmax.com and get a licence key for geoip2 (the new format, not the legacy format)
+{{oauth_client_secret}}:
+    assign a uuid to serve as a password. set the same value for faf-website name/id in db table faf.oauth_clients
+{{password_from_postal_web_configuration}}:
+    after configuring postal set this to the assigned password
+{{turn_secret}}:
+    assign a plaintext password for the coturn server
+
+Set a password like this:
+
+    scripts/config-template-passwd.sh db_password banana
 
 ### Initialize core database
 
@@ -83,6 +132,38 @@ Where `<path>` is the path to your local project, for instance `../faf-python-se
 
 # Service specific configurations
 
+## firewall
+
+alex@taforever3:~/taf-stack$ sudo ufw status numbered
+[sudo] password for alex:
+Status: active
+
+     To                         Action      From
+     --                         ------      ----
+[ 1] 22                         ALLOW IN    Anywhere        ssh
+[ 2] 443/tcp                    ALLOW IN    Anywhere        https (various services, eg website, api, dashboard, etc)
+[ 3] 80                         ALLOW IN    Anywhere        http (various services, eg website, api, dashboard, etc)
+[ 4] 15000                      ALLOW IN    Anywhere        replay server
+[ 5] 15001                      ALLOW IN    Anywhere        demo compiler
+[ 6] 6697                       ALLOW IN    Anywhere        irc
+[ 7] 8001                       ALLOW IN    Anywhere        website retrieval of player/game count from server
+[ 8] 3478/udp                   ALLOW IN    Anywhere        coturn server
+[ 9] 22 (v6)                    ALLOW IN    Anywhere (v6)
+[10] 443/tcp (v6)               ALLOW IN    Anywhere (v6)
+[11] 80 (v6)                    ALLOW IN    Anywhere (v6)
+[12] 15000 (v6)                 ALLOW IN    Anywhere (v6)
+[13] 15001 (v6)                 ALLOW IN    Anywhere (v6)
+[14] 6697 (v6)                  ALLOW IN    Anywhere (v6)
+[15] 8001 (v6)                  ALLOW IN    Anywhere (v6)
+[16] 3478/udp (v6)              ALLOW IN    Anywhere (v6)
+
+## RabbitMQ
+
+     $ docker exec -it faf-rabbitmq /bin/bash
+     $ rabbitmqctl add_user faf-postal banana
+     $ rabbitmqctl add_vhost /faf-postal
+     $ rabbitmqctl set_permissions -p /faf-postal faf-postal ".*" ".*" ".*"
+
 ## Postal
 
 ### Create initial user
@@ -98,7 +179,7 @@ docker exec -it faf-postal /opt/postal/bin/postal make-user
 1. Click `Create the first organization` and follow the instructions
 1. Create a new mail server
     1. Click `Build your first mail server` and enter the following
-    1. Name: FAF Mautic
+    1. Name: TAF Mautic
     1. Short name: faf-mautic
     1. Mode: Choose what's appropriate
 1. Set up the email domain
@@ -108,7 +189,7 @@ docker exec -it faf-postal /opt/postal/bin/postal make-user
     1. Click `Check my records are correct` and make sure everything is green
 1. Set up an SMTP user for faf-mautic
     1. Go to `Credentials` and select `Add your first credential`
-    1. Type: `SMTP`, Name: `FAF Mautic User`, Key: `faf-mautic`, Hold: `Process all messages`
+    1. Type: `SMTP`, Name: `TAF Mautic User`, Key: `faf-mautic`, Hold: `Process all messages`
     1. Click `Create credential`
 1. Check the credentials for Mautic
     1. Go to `Overview` and select `Read about sending e-mail`
@@ -144,8 +225,8 @@ Make sure you set up Postal first.
     1. Configure Custom Fields
         1. Go to `Custom Fields`
         1. Uncheck all except (Alias): country, preferred_locale
-        1. Click `New` and enter Label: `FAF User ID`, Alias: `faf_user_id`, Object: `Contact`, Group: `Core`, Data Type: `Text`, Required: `Yes`, Available for segments: `No`, Is Unique Identifier: `Yes`. Click `Save & Close`
-        1. Click `New` and enter Label: `FAF Username`, Alias: `faf_username`, Object: `Contact`, Group: `Core`, Data Type: `Text`, Required: `Yes`, Available for segments: `No`, Is Unique Identifier: `Yes`. Click `Save & Close`
+        1. Click `New` and enter Label: `TAF User ID`, Alias: `faf_user_id`, Object: `Contact`, Group: `Core`, Data Type: `Text`, Required: `Yes`, Available for segments: `No`, Is Unique Identifier: `Yes`. Click `Save & Close`
+        1. Click `New` and enter Label: `TAF Username`, Alias: `faf_username`, Object: `Contact`, Group: `Core`, Data Type: `Text`, Required: `Yes`, Available for segments: `No`, Is Unique Identifier: `Yes`. Click `Save & Close`
         1. Open the field `Email` and set Required: `Yes`
         
 ## Grafana
