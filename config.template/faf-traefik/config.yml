@@ -1,0 +1,32 @@
+# Listen to HTTP requests with any domain and upgrade them to https.
+# This rule has less weight than other rules, so a http-only 
+# service can still be defined elsewhere
+http:
+  routers:
+    redirector:
+      rule: HostRegexp(`{any:.*}`)
+      entryPoints:
+        - "web"
+        - "web-secure"
+      service: noop@internal
+      middlewares:
+        - redirect
+
+  middlewares:
+    redirect:
+      redirectScheme:
+        scheme: https
+    test-compress:
+      compress: {}
+
+# Hardened TLS options by default. 
+tls:
+  options:
+    default:
+      sniStrict: true
+      minVersion: VersionTLS12
+      cipherSuites:
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256

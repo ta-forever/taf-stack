@@ -1,0 +1,4 @@
+[client]
+user = root
+password = {{db_password}}
+host = localhost

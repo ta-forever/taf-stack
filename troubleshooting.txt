@@ -1,0 +1,194 @@
+ISSUE: locked out of database forgotten password
+RESOLUTION: https://linuxize.com/post/how-to-reset-a-mysql-root-password/
+  $ docker-compose run --rm faf-db mysqld_safe --skip-grant-tables
+  $ docker exec -it 086dbd431f22 sh
+  $$ mysql -u root
+  $$$ update mysql.user set authentication_string = PASSWORD('banana') where account_locked='N';
+
+ISSUE: archilinux docker daemon doesn't start
+SYMPTOM: $ journalctl -xeu docker.service
+  warning msg="Running modprobe bridge br_netfilter failed with message: modprobe: WARNING: Module bridge not found in directory /lib/modules/5.15.74-1-lts\nmodprobe: WARNING: Module br_netfilt
+RESOLUTION: reboot
+
+
+ISSUE: Access denied for user ‘root’@’localhost’
+RESOLUTION: dos2unix *EVERYTHING* including the .env files
+
+
+ISSUE: players have no avataars
+CAUSE: avatar images missing from https://content.taforever.com/taf/avatars
+       - resolution: copy image files (eg core.png) to /opt/taf-stack/data/content/taf/avatars (then restart faf-java-api and faf-python-server?)
+CAUSE: avatar images wrong file permissions.
+       - resolution: sudo chmod 644 data/content/taf/avatars/*.png
+CAUSE: generated field faf.avatars_list.url doesn't match https://content.taforever.com/taf/avatars
+       - resolution: this is a generated field, edit the table schema to point to https://content.taforever.com/taf/avatars then restart faf-java-api and faf-python-server
+CAUSE: player has no assigned avatars
+       - resolution: add some entries to faf.avatars.  doesn't seem right that this should be done manually?
+
+
+ISSUE: players with avatars appear with wrong indentation in chat listed
+CAUSE: wrong avatar image aspect ratio
+       - resolution: try making images width:height = 2:1
+
+ISSUE: player country flags all blue/earth
+CAUSE: missing geoip.mmdb
+  - resolution: create account and license key at https://www.maxmind.com/ (product=GeoLite2-Country, format=new)
+  - add "GEO_IP_LICENSE_KEY: <quoted license key>" to config/faf-python-server/dynamic/config.yml
+  - db will be updated monthly. if you don't want to wait, download and place GeoLite2-Country.mmdb in faf-python-server:/code/ (docker cp GeoLite2-Country.mmdb faf-python-server:/code/)
+  - watch faf-python-server for log entry "File loaded successfully from GeoLite2-Country.mmdb"
+
+
+ISSUE: no featured mods listed when create game
+CAUSE:
+- client cannot reach api.taforever.com due to no DNS record for "api".taforever.com
+  - resolution: add CNAME record for "api"
+- client cannot reach api.taforever.com due to no internal route from api.taforever.com to port 8010
+  - resolution: deploy traefik
+- faf-java-api not booting due to invalid smtp credential
+  - resolution: ensure faf-java-api.env/MAIL_USERNAME and MAIL_PASSWORD match configured user in faf-postal
+- faf-content is serving a bad endpoints.api.url in content.taforever.com/dfc-config.json
+  - resolution: check urls in taf-stack/data/faf-content/dfc-donfig.json
+
+
+ISSUE: unable to register new user from taf website
+- Error! Failed messages: com.sun.mail.smtp.SMTPSendFailedException: 530 From/Sender name is not valid
+CAUSE: config/faf-java-api/faf-java-api.env:EMAIL_FROM_ADDRESS must be from the sites domain name. eg noreply@taforever.com
+
+
+ISSUE: unable to register new user from taf website
+- Error! The entered email address 'asdfasdf@asdfasdf.com' already has an associated account.
+- CAUSE: a user with address asdfasdf@asdfasdf.com already exists in table faf.login.email
+
+
+ISSUE: unable to change password from taf website
+- Error! PreparedStatementCallback; bad SQL grammar [UPDATE `faf-anope`.anope_db_NickCore SET pass = ? WHERE display = ?]; nested exception is java.sql.SQLSyntaxErrorException: Table 'faf-anope.anope_db_NickCore' doesn't exist
+CAUSE: anope database tables not created
+RESOLUTION:
+- ensure anope service is being run (distinct from unrealircd) and has db_sql_live module active
+- log into irc and issue a /msg NickServ REGISTER Password_here Email@address.here to cause anope to create the NickCore table
+
+
+ISSUE: unrealircd spammed with error logs:
+faf-unrealircd           | [channeldb] Error writing to temporary database file '/data/unrealircd/data/channel.db.4a4bf094.tmp': Could not open file: Permission denied (DATABASE NOT SAVED)
+faf-unrealircd           | [tkldb] Error writing to temporary database file '/data/unrealircd/data/tkl.db.738b0b64.tmp': Could not open file: Permission denied (DATABASE NOT SAVED)
+RESOLUTION: chmod 999:999 data/faf-unrealircd
+
+
+ISSUE: unable to register new user from taf website
+- "Username" field on website won't green up
+CAUSE: faf-java-api not up
+
+ISSUE: unable to register new user from taf website
+- Bad OAuth client credentials
+CAUSE: faf.oauth_clients.client_secret doesn't match config/faf-website/faf-website.env:OAUTH_CLIENT_SECRET
+
+ISSUE: unable to register new user from taf website
+- no response when click "register", eventually "bad gateway"
+- website logs indicate "Error: HTTP status 401" at /code/node_modules/client-oauth2/src/client-oauth2.js:277:25
+- diagnostics exec inside faf-website docker: nodejs test_oauth.js indicates: {"status":"401","title":"unauthorized","detail":"AbstractUserDetailsAuthenticationProvider.badCredentials"}
+CAUSE:
+- missing/bad oauth user faf-website
+  - resolution:
+    - check database=faf_db, table=oauth_clients. require entry for "faf-website" with password matching that of taf-stack/config/faf-website/faf-website.env (seems with {noop})
+    - edit and rerun db/totala-bootstrap.sql if you don't mind nuking your DB
+- missing/bad API_URL in faf-website.conf (check http versus https)
+
+ISSUE: unable to register new user from taf website
+- faf-java-api log: org.springframework.mail.MailSendException: Failed messages: com.sun.mail.smtp.SMTPSendFailedException: 530 From/Sender name is not valid
+- faf-postal log: => 530 From/Sender name is not valid
+- https://github.com/postalhq/postal/issues/863: The error message means that the "From" email address you are using does not include a domain which has been added to the Postal server that has the credential on it.
+CAUSE: faf-stack/faf-java-api.env: EMAIL_FROM_ADDRESS doesn't match registered domain name
+  - resolution: set faf-stack/faf-java-api.env: EMAIL_FROM_ADDRESS=admin@taforever.com
+
+ISSUE: unable to register new user from taf website
+- web respose: Error! Failed to close server connection after message failures; nested exception is javax.mail.MessagingException: Can't send command to SMTP host; nested exception is: java.net.SocketException: Broken pipe (Write failed). Failed messages: com.sun.mail.smtp.SMTPSendFailedException: [EOF]
+- faf-postal logs: ERROR -- #<Bunny::Session:0x7fb5cc1ca7d0 faf-postal@faf-rabbitmq:5672, vhost=/faf-postal, addresses=[faf-rabbitmq:5672]>: Authentication with RabbitMQ failed: 403 ACCESS_REFUSED
+CAUSE: rabbitmq is not configured
+  - resolution:
+     $ docker exec -it faf-rabbitmq /bin/bash
+     $ rabbitmqctl add_user faf-postal banana
+     $ rabbitmqctl add_vhost /faf-postal
+     $ rabbitmqctl set_permissions -p /faf-postal faf-postal ".*" ".*" ".*"
+
+
+ISSUE: unable to register new user from taf website
+- web indicates success
+- postal web admin shows message in queue, but there it stays
+CAUSE: no smtp.username/password provided in config/faf-postal/config/postal.yml
+  - resolution: create user using postal web interface. set username/password in postal.yml
+
+ISSUE: unable to register new user from taf website
+- web indicates success
+- postal web admin shows message in queue, but with status "soft fail".  "No SMTP servers were available".  "execution expired"
+CAUSE: cloud service blocks smtp
+  - resolution: request support from cloud service to unblock smtp port 25 to allow server to send emails
+
+
+ISSUE: no connection to website from outside
+RESOLUTION: sudo ufw allow 443/tcp
+            sudo ufw allow 8001/tcp
+
+
+ISSUE: bad/outdated faf client download link on website
+resolution: check faf-website/scripts/getLatestClientRelease.js
+
+
+ISSUE: registration welcome email has \n instead of actual new lines
+resolution: use html tags
+
+
+ISSUE: news tab never loads, eventually shows "bad gateway"
+CAUSES:
+  - word-press not running
+  - in taf-stack/config/faf-website.env: SP_NEWSHUB_CATEGORYID and WP_NEWSHUBARCHIVE_CATEGORYID need to be set to INTEGERS!! (not slug names!)
+
+
+ISSUE: faf website download button doesn't pick up new release
+CAUSE: webpage needs resetting
+  - resolution: docker-compose restart faf-website
+
+
+ISSUE: unable to login to faf website.
+  - error="invalid_grant", error_description="Invalid redirect: https://www.taforever.com/callback does not match one of the registered values."
+  - error="invalid_grant", error_description="Invalid redirect: http://localhost:8020/callback does not match one of the registered values."
+CAUSE: config/faf-website/faf-website.env bad HOST, and not matching faf-db oauth table permitted redirects
+  - resolution set HOST=https://www.taforever.com add https://www.taforever.com/callback to permitted redirects
+
+ISSUE: leaderboards are empty
+- api.taforever.com/leaderboards/global returns empty data { }
+- faf.global_rating_rank_view table is empty
+- faf.global_calculate_ranks_view event's active_global_players table is empty
+CAUSE: faf.global_calculate_ranks_view event, gs.gameMod = 0 doesn't correspond to any game mods defined in game_featuredMods
+  - resolution: define a game_featuredMods with id=0, or modify the event to select the desired game mods that ARE defined
+  - similarly for ladder1v1 leaderboards rating distributions
+
+
+ISSUE: can't run init-db or db-migrations
+"""
+$ docker-compose run --rm faf-db-migrations migrate
+Creating faf-stack_faf-db-migrations_run ... done
+Flyway Community Edition 5.2.4 by Boxfuse
+ERROR:
+Unable to obtain connection from database (jdbc:mysql://faf-db/faf?useSSL=false) for user 'root': Unknown database 'faf'
+------------------------------------------------------------------------------------------------------------------------
+SQL State  : 42000
+Error Code : 1049
+Message    : Unknown database 'faf'
+"""
+CAUSE: faf db not exist
+RESOLUTION: create faf db
+D:\wrk\faf\faf-stack>docker exec -i faf-db mysql --user=root --password=banana
+mysql: [Warning] Using a password on the command line interface can be insecure.
+create database if not exists `faf`;
+
+
+
+ISSUE: sec_error_revoked_certificate when trying to visit website in firefox
+CAUSE: unknown firefox issue https://stackoverflow.com/questions/12142907/error-sec-error-revoked-certificate-when-viewed-in-firefox-only
+RESOLUTION: delete config/faf-traefik/acme.json and restart faf-traefik
+
+
+ISSUE: spam bots spamming irc
+RESOLUTION:
+/oper TheCoreCommander <pw> (see config/faf-ircd/unrealircd.conf)
+/SPAMFILTER add -simple pc zline 1d ... *CHANNEL SMELLS*

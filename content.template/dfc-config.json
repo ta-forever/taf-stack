@@ -1,0 +1,38 @@
+{
+    "gitHubRepo": {
+        "apiUrl": "https://api.github.com/repos/ta-forever/downlords-taf-client"
+    },
+    "latestRelease": {
+        "version": "1.4.3-taf-0.10.15.3",
+        "minimumVersion": "1.4.3-taf-0.14.0",
+        "windowsUrl": "https://github.com/ta-forever/downlords-taf-client/releases/download/1.4.3-taf-0.15.3/tafclient_windows-x64_1_4_3-taf-0_15_3.exe",
+        "linuxUrl": "https://github.com/ta-forever/downlords-taf-client/releases/download/1.4.3-taf-0.15.3/tafclient_unix_1_4_3-taf-0_15_3.tar.gz",
+        "releaseNotesUrl": "https://github.com/ta-forever/downlords-taf-client/releases/tag/1.4.3-taf-0.15.3",
+        "mandatory": false,
+        "message": ""
+    },
+    "recommendedMaps": [ 1,2,3,4,5 ],
+    "endpoints": [
+        {
+            "name": "TA Forever (testing)",
+            "lobby": {
+                "host": "192.168.0.100",
+                "port": 8001
+            },
+            "irc": {
+                "host": "192.168.0.100",
+                "port": 6697
+            },
+            "liveReplay": {
+                "host": "192.168.0.100",
+                "port": 15000
+            },
+            "api": {
+                "url": "http://192.168.0.100:8010"
+            },
+            "galacticWar": {
+                "url": "http://192.168.0.100/galactic_war/galactic_war.json"
+            }
+        }
+    ]
+}

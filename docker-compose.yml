@@ -1,0 +1,730 @@
+version: '3.3'
+
+services:
+
+  ci-ubuntu-focal:
+    container_name: ci-ubuntu-focal
+    image: taforever/ci-ubuntu-focal:latest
+    volumes:
+      - d:/wrk/gpgnet4ta:/home/root/gpgnet4ta
+      - d:/wrk/maptool:/home/root/maptool
+    restart: unless-stopped
+    command: ["sleep", "infinity"]
+
+  #
+  # Initialize all data directories with correct permissions.
+  # This is a workaround for the fact that Docker always creates volumes as root. This could also be done outside
+  # docker-compose in a shell script, but it would add yet another manual maintenance step. This way, permissions are
+  # set correctly by simply using docker-compose.
+  #
+  faf-init-volumes:
+    container_name: faf-init-volumes
+    image: alpine:latest
+    volumes:
+      - ./:/faf-stack
+    command: sh -c "cd /faf-stack && sh scripts/init-volumes.sh"
+
+  #
+  # Traefik server for reverse proxying, load balancing and fetching Let's encrypt certificates
+  # Listens for changes on docker containers and adds them if matching labels are found
+  # Runs in dashboard mode, secured by basic http auth
+  #
+  faf-traefik:
+    image: traefik:v2.2.11
+    env_file: ./config/faf-traefik/faf-traefik.env
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock # So that Traefik can listen to the Docker events
+      # Config folder contains 3 files:
+      # traefik.yml  - Static configuration (change requires restart)
+      # config.yml   - Dynamic configuration (traefik listens for changes)
+      # acme.json    - Make sure to set chmod to 600 (will be populated by traefik)
+      - ./config/faf-traefik:/etc/traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.faf-traefik.entryPoints=web-secure"
+      - "traefik.http.routers.faf-traefik.rule=Host(`traefik.${DOMAINNAME}`)"
+      - "traefik.http.routers.faf-traefik.tls.certresolver=default"
+      - "traefik.http.routers.faf-traefik.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_USERNAME}:${TRAEFIK_PASSWORD}"
+      - "traefik.http.routers.faf-traefik.service=api@internal"
+      - "traefik.http.services.faf-traefik.loadbalancer.server.port=8080" # Dummy port so Docker doesn't complain
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${HIGH_PRIO_LOG_FILES}"
+
+
+  #
+  # Coturn server for proxying between players
+  # It uses net: "host" for performance reasons.
+  #
+  faf-coturn:
+    container_name: faf-coturn
+    image: faforever/coturn-lt-cred:v1.1
+    env_file: ./config/faf-coturn/faf-coturn.env
+    network_mode: host
+    #networks:
+    #  faf:
+    #    aliases:
+    #      - "faf-coturn"
+    #ports:
+    #    - "192.168.1.109:3478:3478"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+  #
+  # FAF MySQL database.
+  #
+  faf-db:
+    container_name: faf-db
+    image: mysql:5.7
+    user: ${FAF_DB_USER}
+    networks:
+      faf:
+        aliases:
+          - "faf-db"
+    restart: unless-stopped
+    env_file: ./config/faf-db/faf-db.env
+    ports:
+        - "127.0.0.1:3306:3306"
+    volumes:
+      - ./config/faf-db/mysqld.cnf:/etc/mysql/mysql.conf.d/mysqld-custom.cnf
+      - ./config/faf-db/mysql.cnf:/root/.my.cnf
+      - ./data/faf-db:/var/lib/mysql
+    depends_on:
+      - faf-init-volumes
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+  #
+  # FAF MySQL database migrations creates & updates the database tables and some required data
+  #
+  faf-db-migrations:
+    container_name: faf-db-migrations
+    image: taforever/taf-db-migrations:v119-taf
+    #build:
+    #  context: ..\db
+    #  dockerfile: Dockerfile
+
+    user: ${FAF_DB_USER}
+    networks:
+      - faf
+    restart: "no"
+    env_file: ./config/faf-db-migrations/faf-db-migrations.env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+  #
+  # Prometheus exporter for MySQL server metrics.
+  #
+  faf-mysql-exporter:
+    container_name: faf-mysql-exporter
+    image: prom/mysqld-exporter:v0.12.1
+    networks:
+      faf:
+        aliases:
+          - "faf-mysql-exporter"
+    restart: unless-stopped
+    env_file: ./config/faf-mysql-exporter/faf-mysql-exporter.env
+    expose:
+      - "9104"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+
+  #
+  # FAF game server for clients to connect to.
+  #
+  faf-python-server:
+    container_name: faf-python-server
+    #image: taforever/taf-python-server:v2022.11.13
+    image: taforever/taf-python-server:v2022.12.01
+    #build:
+    #  context: ..\server
+    #  dockerfile: Dockerfile
+
+    # for pdb.set_trace()
+    # stdin_open: true
+    # tty: true
+
+    user: ${FAF_PYTHON_SERVER_USER}
+    networks:
+      faf:
+        aliases:
+          - "faf-python-server"
+    restart: unless-stopped
+    env_file: ./config/faf-python-server/faf-python-server.env
+    volumes:
+      - ./config/faf-python-server/dynamic:/code/config
+      - ./data/content:/content
+    ulimits:
+      nproc: 65535
+      nofile:
+        soft: 100000
+        hard: 200000
+    ports:
+      - "8001:8001" # Server
+      - "4000:4000" # Control server
+    depends_on:
+      - faf-init-volumes
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${HIGH_PRIO_LOG_FILES}"
+
+  #
+  # FAF JSON-API to provide data over HTTP.
+  #
+  faf-java-api:
+    container_name: faf-java-api
+    #image: taforever/taf-java-api:v2022.11.04
+    image: taforever/taf-java-api:v2022.11.07
+    #build:
+    #  context: ..\faf-java-api
+    #  dockerfile: Dockerfile
+    user: ${FAF_JAVA_API_USER}
+    networks:
+      faf:
+        aliases:
+          - "faf-java-api"
+    restart: unless-stopped
+    env_file: ./config/faf-java-api/faf-java-api.env
+    volumes:
+      - ./config/faf-java-api/pki:/pki
+      - ./data/content:/content
+      - ./data/faf-java-api/logs:/logs
+      - ./data/faf-java-api/repositories:/repositories
+    expose:
+      - "8010" # HTTP API
+      - "8011" # HTTP Management API
+    ports:
+      - "8010:8010" # For internal testing only
+    depends_on:
+      - faf-init-volumes
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.faf-java-api.rule=Host(`api.${DOMAINNAME}`)"
+      - "traefik.http.routers.faf-java-api.entryPoints=web-secure"
+      - "traefik.http.routers.faf-java-api.tls.certresolver=default"
+      - "traefik.http.routers.faf-java-api.middlewares=test-compress@file"
+      - "traefik.http.services.faf-java-api.loadbalancer.server.port=8010"
+    # TODO move to Dockerfile
+    healthcheck:
+      test: "wget -q -O /dev/null http://localhost:8011/actuator/health"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${HIGH_PRIO_LOG_FILES}"
+
+  #
+  # FAF website.
+  #
+  faf-website:
+    container_name: faf-website
+    image: taforever/taf-website:v0.3
+    #build:
+    #  context: ..\website
+    #  dockerfile: Dockerfile
+    user: ${FAF_WEBSITE_USER}
+    restart: unless-stopped
+    env_file: ./config/faf-website/faf-website.env
+    volumes:
+      - ./config/faf-website/faf-website.env:/code/.env
+    networks:
+      - faf
+    ports:
+      - "127.0.0.1:8020:3000" # For internal testing only
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.faf-website.rule=Host(`www.${DOMAINNAME}`) || Host(`${DOMAINNAME}`) || Host(`clans.${DOMAINNAME}`)"
+      - "traefik.http.routers.faf-website.entryPoints=web-secure"
+      - "traefik.http.routers.faf-website.tls.certresolver=default"
+      - "traefik.http.routers.faf-website.middlewares=test-compress@file"
+      - "traefik.http.services.faf-website.loadbalancer.server.port=3000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+  #
+  # Interface to administer Spring Boot applications.
+  #
+  faf-spring-boot-admin:
+    container_name: faf-spring-boot-admin
+    image: slydeveloper/spring-boot-admin:1.1
+    user: ${FAF_SPRING_BOOT_ADMIN_USER}
+    restart: unless-stopped
+    env_file: ./config/faf-spring-boot-admin/faf-spring-boot-admin.env
+    networks:
+      faf:
+        aliases:
+          - "faf-spring-boot-admin"
+    # Service currently not in use
+    # restart: always
+    healthcheck:
+      test: "wget -q -O /dev/null http://localhost:1111/health"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.faf-spring-boot-admin.rule=Host(`bootadmin.${DOMAINNAME}`)"
+      - "traefik.http.routers.faf-spring-boot-admin.entryPoints=web-secure"
+      - "traefik.http.routers.faf-spring-boot-admin.tls.certresolver=default"
+      - "traefik.http.services.faf-spring-boot-admin.loadbalancer.server.port=1111"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+  #
+  # Prometheus is a monitoring and alerting tool that scrapes and stores time-series data.
+  #
+  faf-prometheus:
+    container_name: faf-prometheus
+    image: prom/prometheus:v2.21.0
+    command:
+      # Copied from Dockerfile because we lose existing commands, when defining new ones
+      # https://github.com/prometheus/prometheus/blob/master/Dockerfile
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      # Increase the storage retention to 12 weeks
+      - "--storage.tsdb.retention.time=12w"
+    user: ${FAF_PROMETHEUS_USER}
+    restart: unless-stopped
+    env_file: ./config/faf-prometheus/faf-prometheus.env
+    networks:
+      faf:
+        aliases:
+          - "faf-prometheus"
+    #extra_hosts:
+    # - "dockerhost:${HOST_IP}"
+    volumes:
+      - ./config/faf-prometheus/faf-prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./data/faf-prometheus:/prometheus
+    depends_on:
+      - faf-init-volumes
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.faf-prometheus.rule=Host(`prometheus.${DOMAINNAME}`)"
+      - "traefik.http.routers.faf-prometheus.entryPoints=web-secure"
+      - "traefik.http.routers.faf-prometheus.tls.certresolver=default"
+      - "traefik.http.routers.faf-prometheus.middlewares=prometheus-auth"
+      - "traefik.http.middlewares.prometheus-auth.basicauth.users=${PROMETHEUS_USERNAME}:${PROMETHEUS_PASSWORD}"
+      - "traefik.http.services.faf-prometheus.loadbalancer.server.port=9090"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+  #
+  # Grafana reads data from Prometheus and draws monitoring dashboards.
+  #
+  # This image needs to run as root since is changes users inside the container.
+  #
+  faf-grafana:
+    container_name: faf-grafana
+    image: grafana/grafana:6.2.5
+    restart: unless-stopped
+    networks:
+      - "faf"
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./data/faf-grafana:/var/lib/grafana
+    depends_on:
+      - faf-init-volumes
+    env_file: ./config/faf-grafana/faf-grafana.env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.faf-grafana.rule=Host(`grafana.${DOMAINNAME}`)"
+      - "traefik.http.routers.faf-grafana.entryPoints=web-secure"
+      - "traefik.http.routers.faf-grafana.tls.certresolver=default"
+      - "traefik.http.services.faf-grafana.loadbalancer.server.port=3000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+  #
+  # IRC for FAF chat.
+  #
+  faf-ircd:
+    container_name: faf-ircd
+    image: faforever/faf-unrealircd:5.2.4
+    restart: unless-stopped
+    networks:
+      - faf
+    volumes:
+      - ./config/faf-ircd/ssl/server.cert.pem:/data/unrealircd/conf/tls/server.cert.pem
+      - ./config/faf-ircd/ssl/server.key.pem:/data/unrealircd/conf/tls/server.key.pem
+      - ./config/faf-ircd/unrealircd.conf:/data/unrealircd/conf/unrealircd.conf
+      - ./config/faf-ircd/motd.txt:/data/unrealircd/conf/ircd.motd
+      - ./data/faf-ircd/:/data/unrealircd/data/
+    ports:
+      - "6667:6667" # plain text for QAI and Python client
+      - "6697:6697" # ssl only
+      - "8167:8167" # ssl only
+    expose:
+      # Anope
+      - 7000
+    sysctls:
+      - net.ipv4.tcp_keepalive_intvl=45
+      - net.ipv4.tcp_keepalive_probes=3
+      - net.ipv4.tcp_keepalive_time=45      
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+  #
+  # IRC Services
+  #
+  faf-anope:
+    container_name: faf-anope
+    image: anope/anope:2.0.10
+    restart: unless-stopped
+    networks:
+      - faf
+    depends_on:
+      - faf-ircd
+    volumes:
+      - ./config/faf-anope/services.conf:/anope/conf/services.conf
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+  #
+  # The content management system which is still being used as a backend for the website. The website accesses
+  # Wordpress over a JSON API plugin.
+  #
+  faf-wordpress:
+    container_name: faf-wordpress
+    image: wordpress
+    user: ${FAF_WORDPRESS_USER}
+    restart: unless-stopped
+    volumes:
+      - ./data/faf-wordpress/wp-content:/var/www/html/wp-content/:rw
+    networks:
+      faf:
+        aliases:
+          - "faf-wordpress"
+    depends_on:
+      - faf-init-volumes
+    env_file: ./config/faf-wordpress/faf-wordpress.env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.faf-wordpress.rule=Host(`direct.${DOMAINNAME}`)"
+      - "traefik.http.routers.faf-wordpress.entryPoints=web-secure"
+      - "traefik.http.routers.faf-wordpress.tls.certresolver=default"
+      - "traefik.http.routers.faf-wordpress-http.rule=Host(`direct.${DOMAINNAME}`)"
+      - "traefik.http.routers.faf-wordpress-http.entryPoints=web"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+  #
+  # Serves static files such as maps, mods, game files etc.
+  #
+  faf-content:
+    container_name: faf-content
+    image: nginx:1.19
+    restart: unless-stopped
+    volumes:
+      - ./data/content:/usr/share/nginx/html
+    networks:
+      - faf
+    depends_on:
+      - faf-init-volumes
+    env_file: ./config/faf-content/faf-content.env
+    #ports:             # uncomment for test deployments on localhost
+    #  - "80:80"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.faf-content.rule=Host(`content.${DOMAINNAME}`) || Host(`replay.${DOMAINNAME}`)"
+      - "traefik.http.routers.faf-content.entryPoints=web-secure"
+      - "traefik.http.routers.faf-content.tls.certresolver=default"
+      - "traefik.http.routers.faf-content.middlewares=redirect-replay-subdomain, redirect-replay-php, redirect-old-vault, test-compress@file"
+      - "traefik.http.middlewares.redirect-replay-subdomain.redirectregex.regex=^(http|https)://replay.${DOMAINNAME}/(.*)"
+      - "traefik.http.middlewares.redirect-replay-subdomain.redirectregex.replacement=$${1}://api.${DOMAINNAME}/game/$${2}/replay"
+      - "traefik.http.middlewares.redirect-replay-php.redirectregex.regex=^(http|https)://content.${DOMAINNAME}/faf/vault/replay_vault/replay.php\\?id=(.*)"
+      - "traefik.http.middlewares.redirect-replay-php.redirectregex.replacement=$${1}://api.${DOMAINNAME}/game/$${2}/replay"
+      - "traefik.http.middlewares.redirect-old-vault.redirectregex.regex=^https://content.${DOMAINNAME}/faf/vault/(.*)"
+      - "traefik.http.middlewares.redirect-old-vault.redirectregex.replacement=https://content.${DOMAINNAME}/$${1}"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+  #
+  # TAF Replay Server
+  #
+  taf-replay-server:
+    container_name: taf-replay-server
+    #image: taforever/gpgnet4ta:v0.14.9
+    image: taforever/gpgnet4ta:2022.10.29
+    user: ${TAF_REPLAY_SERVER_USER}
+    restart: unless-stopped
+    volumes:
+      - ./data/content:/content
+      - ./config/taf-replay-server:/config
+    networks:
+      - faf
+    depends_on:
+      - faf-init-volumes
+    env_file: ./config/taf-replay-server/taf-replay-server.env
+    ports:
+      - "15001:15001"
+    entrypoint: /bin/sh ./replayserver.sh
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+  #
+  # TAF Demo Compiler
+  #
+  taf-demo-compiler:
+    container_name: taf-demo-compiler
+    #image: taforever/gpgnet4ta:v0.14.9
+    image: taforever/gpgnet4ta:2022.10.29
+    user: ${TAF_DEMO_COMPILER_USER}
+    restart: unless-stopped
+    volumes:
+      - ./data/content:/content
+      - ./config/taf-demo-compiler:/config
+    networks:
+      - faf
+    depends_on:
+      - faf-init-volumes
+    env_file: ./config/taf-demo-compiler/taf-demo-compiler.env
+    ports:
+      - "15000:15000"
+    entrypoint: /bin/sh ./democompiler.sh
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+  faf-policy-server:
+    container_name: faf-policy-server
+    image: faforever/faf-policy-server:v1.21
+    env_file: ./config/faf-policy-server/faf-policy-server.env
+    user: ${FAF_POLICY_SERVER_USER}
+    restart: unless-stopped
+    networks:
+      faf:
+        aliases:
+          - "faf-policy-server"
+    expose:
+      - "8097"
+    volumes:
+      - ./data/faf-policy-server/faf-uid-verifier/verifier:/app/verifier
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+  #
+  # Postal is a fully featured open source mail delivery platform for incoming & outgoing e-mail.
+  #
+  faf-postal:
+    container_name: faf-postal
+    image: faforever/faf-postal:1.1
+    env_file: ./config/faf-postal/faf-postal.env
+    user: ${FAF_POSTAL_USER}
+    restart: unless-stopped
+    networks:
+      faf:
+        aliases:
+          - "faf-postal"
+    expose:
+      - "25"
+    #ports:
+    #  - "5000:5000"
+    volumes:
+      - ./data/faf-postal/assets:/opt/postal/public/assets
+      - ./config/faf-postal/config:/opt/postal/config
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.faf-postal.rule=Host(`postal.${DOMAINNAME}`)"
+      - "traefik.http.routers.faf-postal.entryPoints=web-secure"
+      - "traefik.http.routers.faf-postal.tls.certresolver=default"
+      - "traefik.http.services.faf-postal.loadbalancer.server.port=5000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+  #
+  # RabbitMQ is open source message broker software (sometimes called message-oriented middleware) that implements the
+  # Advanced Message Queuing Protocol (AMQP).
+  #
+  faf-rabbitmq:
+    image: rabbitmq:3.8.8-management-alpine
+    container_name: faf-rabbitmq
+    hostname: rabbitmq.${DOMAINNAME}
+    expose:
+      - "15692"
+    env_file: ./config/faf-rabbitmq/faf-rabbitmq.env
+    user: ${FAF_RABBITMQ_USER}
+    restart: unless-stopped
+    networks:
+      faf:
+        aliases:
+          - "faf-rabbitmq"
+    volumes:
+      - ./config/faf-rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins
+      - ./data/faf-rabbitmq:/var/lib/rabbitmq
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.faf-rabbitmq.rule=Host(`rabbitmq.${DOMAINNAME}`)"
+      - "traefik.http.routers.faf-rabbitmq.entryPoints=web-secure"
+      - "traefik.http.routers.faf-rabbitmq.tls.certresolver=default"
+      - "traefik.http.services.faf-rabbitmq.loadbalancer.server.port=15672"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+  #
+  # Mautic is an open source marketing automation software.
+  #
+  faf-mautic:
+    container_name: faf-mautic
+    image: mautic/mautic:2.13-apache
+    env_file: ./config/faf-mautic/faf-mautic.env
+    user: ${FAF_MAUTIC_USER}
+    restart: unless-stopped
+    networks:
+      faf:
+        aliases:
+          - "faf-mautic"
+    volumes:
+      - ./data/faf-mautic/html:/var/www/html
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.faf-mautic.rule=Host(`mautic.${DOMAINNAME}`)"
+      - "traefik.http.routers.faf-mautic.entryPoints=web-secure"
+      - "traefik.http.routers.faf-mautic.tls.certresolver=default"
+    #ports:
+    #  - "0.0.0.0:5080:80"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+  # Collects system information for prometheus
+  faf-node-exporter:
+    image: prom/node-exporter
+    restart: unless-stopped
+    container_name: faf-node-exporter
+    expose:
+      - "9100"
+    networks:
+      faf:
+        aliases:
+          - "faf-node-exporter"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+  # Collects docker status for prometheus
+  faf-cadvisor:
+    image: google/cadvisor:latest
+    container_name: faf-cadvisor
+    restart: unless-stopped
+    networks:
+      faf:
+        aliases:
+          - "faf-cadvisor"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    expose:
+      - "8080"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${DEFAULT_LOG_SIZE}"
+        max-file: "${DEFAULT_LOG_FILES}"
+
+
+  faf-gitea:
+    image: gitea/gitea:latest
+    container_name: faf-gitea
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+    restart: unless-stopped
+    volumes:
+      #- ./config/faf-gitea:/config
+      - ./data/faf-gitea:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+    #  - "3000:3000"
+      - "222:22"
+    networks:
+      - faf
+    labels:
+      #- "traefik.enable=true"
+      #- "traefik.http.routers.faf-gitea.rule=Host(`git.${DOMAINNAME}`)"
+      #- "traefik.http.routers.faf-gitea.entryPoints=web-secure"
+      #- "traefik.http.routers.faf-gitea.tls.certresolver=default"
+      #- "traefik.http.routers.faf-gitea.middlewares=test-compress@file"
+      #- "traefik.http.services.faf-gitea.loadbalancer.server.port=3000"
+      - "traefik.enable=true"
+      - "traefik.http.routers.faf-gitea.rule=Host(`git.${DOMAINNAME}`)"
+      - "traefik.http.routers.faf-gitea.entryPoints=web-secure"
+      - "traefik.http.routers.faf-gitea.tls.certresolver=default"
+      - "traefik.http.services.faf-gitea.loadbalancer.server.port=3000"
+
+networks:
+  faf:
+    driver: bridge
