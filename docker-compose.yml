@@ -5,9 +5,9 @@ services:
   ci-ubuntu-focal:
     container_name: ci-ubuntu-focal
     image: taforever/ci-ubuntu-focal:latest
-    #volumes:
-    #  - d:/wrk/gpgnet4ta:/home/root/gpgnet4ta
-    #  - d:/wrk/maptool:/home/root/maptool
+    volumes:
+      - d:/wrk/gpgnet4ta:/home/root/gpgnet4ta
+      - d:/wrk/maptool:/home/root/maptool
     restart: unless-stopped
     command: ["sleep", "infinity"]
 

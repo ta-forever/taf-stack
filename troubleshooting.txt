@@ -1,3 +1,10 @@
+ISSUE: locked out of database forgotten password
+RESOLUTION: https://linuxize.com/post/how-to-reset-a-mysql-root-password/
+  $ docker-compose run --rm faf-db mysqld_safe --skip-grant-tables
+  $ docker exec -it 086dbd431f22 sh
+  $$ mysql -u root
+  $$$ update mysql.user set authentication_string = PASSWORD('banana') where account_locked='N';
+
 ISSUE: archilinux docker daemon doesn't start
 SYMPTOM: $ journalctl -xeu docker.service
   warning msg="Running modprobe bridge br_netfilter failed with message: modprobe: WARNING: Module bridge not found in directory /lib/modules/5.15.74-1-lts\nmodprobe: WARNING: Module br_netfilt
@@ -179,3 +186,9 @@ create database if not exists `faf`;
 ISSUE: sec_error_revoked_certificate when trying to visit website in firefox
 CAUSE: unknown firefox issue https://stackoverflow.com/questions/12142907/error-sec-error-revoked-certificate-when-viewed-in-firefox-only
 RESOLUTION: delete config/faf-traefik/acme.json and restart faf-traefik
+
+
+ISSUE: spam bots spamming irc
+RESOLUTION:
+/oper TheCoreCommander <pw> (see config/faf-ircd/unrealircd.conf)
+/SPAMFILTER add -simple pc zline 1d ... *CHANNEL SMELLS*
