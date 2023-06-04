@@ -1,6 +1,3 @@
-gvm8B2XLLvH1
-TAF Mautic User / mHXxDUk8fxB8d1crKDlKeddT
-
 ISSUE: archilinux docker daemon doesn't start
 SYMPTOM: $ journalctl -xeu docker.service
   warning msg="Running modprobe bridge br_netfilter failed with message: modprobe: WARNING: Module bridge not found in directory /lib/modules/5.15.74-1-lts\nmodprobe: WARNING: Module br_netfilt

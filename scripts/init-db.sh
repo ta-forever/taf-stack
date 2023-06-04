@@ -15,7 +15,7 @@ log_process_id=$!
 
 echo -n "Waiting for faf-db "
 current_wait=0
-while ! docker exec -i faf-db sh -c "mysqladmin ping -h 127.0.0.1 -uroot -pgvm8B2XLLvH1" >/dev/null 2>&1
+while ! docker exec -i faf-db sh -c "mysqladmin ping -h 127.0.0.1 -uroot -p${MYSQL_ROOT_PASSWORD}" >/dev/null 2>&1
 do
   if [ ${current_wait} -ge ${MAX_WAIT} ]; then
     echo "Timeout on startup of faf-db"

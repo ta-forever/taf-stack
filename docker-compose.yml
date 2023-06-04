@@ -113,7 +113,7 @@ services:
   #
   faf-db-migrations:
     container_name: faf-db-migrations
-    image: taforever/taf-db-migrations:v118-taf
+    image: taforever/taf-db-migrations:v119-taf
     #build:
     #  context: ..\db
     #  dockerfile: Dockerfile
@@ -155,8 +155,8 @@ services:
   #
   faf-python-server:
     container_name: faf-python-server
-    #image: taforever/taf-python-server:v1.5.2-taf-0.12.5
-    image: taforever/taf-python-server:v2022.10.30
+    #image: taforever/taf-python-server:v2022.11.13
+    image: taforever/taf-python-server:v2022.12.01
     #build:
     #  context: ..\server
     #  dockerfile: Dockerfile
@@ -196,7 +196,8 @@ services:
   #
   faf-java-api:
     container_name: faf-java-api
-    image: taforever/taf-java-api:v2022.11.04
+    #image: taforever/taf-java-api:v2022.11.04
+    image: taforever/taf-java-api:v2022.11.07
     #build:
     #  context: ..\faf-java-api
     #  dockerfile: Dockerfile
@@ -396,6 +397,10 @@ services:
     expose:
       # Anope
       - 7000
+    sysctls:
+      - net.ipv4.tcp_keepalive_intvl=45
+      - net.ipv4.tcp_keepalive_probes=3
+      - net.ipv4.tcp_keepalive_time=45      
     logging:
       driver: "json-file"
       options:
@@ -688,6 +693,38 @@ services:
       options:
         max-size: "${DEFAULT_LOG_SIZE}"
         max-file: "${DEFAULT_LOG_FILES}"
+
+
+  faf-gitea:
+    image: gitea/gitea:latest
+    container_name: faf-gitea
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+    restart: unless-stopped
+    volumes:
+      #- ./config/faf-gitea:/config
+      - ./data/faf-gitea:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+    #  - "3000:3000"
+      - "222:22"
+    networks:
+      - faf
+    labels:
+      #- "traefik.enable=true"
+      #- "traefik.http.routers.faf-gitea.rule=Host(`git.${DOMAINNAME}`)"
+      #- "traefik.http.routers.faf-gitea.entryPoints=web-secure"
+      #- "traefik.http.routers.faf-gitea.tls.certresolver=default"
+      #- "traefik.http.routers.faf-gitea.middlewares=test-compress@file"
+      #- "traefik.http.services.faf-gitea.loadbalancer.server.port=3000"
+      - "traefik.enable=true"
+      - "traefik.http.routers.faf-gitea.rule=Host(`git.${DOMAINNAME}`)"
+      - "traefik.http.routers.faf-gitea.entryPoints=web-secure"
+      - "traefik.http.routers.faf-gitea.tls.certresolver=default"
+      - "traefik.http.services.faf-gitea.loadbalancer.server.port=3000"
+
 networks:
   faf:
     driver: bridge
