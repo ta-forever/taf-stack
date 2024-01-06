@@ -5,9 +5,9 @@ services:
   ci-ubuntu-focal:
     container_name: ci-ubuntu-focal
     image: taforever/ci-ubuntu-focal:latest
-    volumes:
-      - d:/wrk/gpgnet4ta:/home/root/gpgnet4ta
-      - d:/wrk/maptool:/home/root/maptool
+    #volumes:
+    #  - d:/wrk/gpgnet4ta:/home/root/gpgnet4ta
+    #  - d:/wrk/maptool:/home/root/maptool
     restart: unless-stopped
     command: ["sleep", "infinity"]
 
@@ -113,7 +113,7 @@ services:
   #
   faf-db-migrations:
     container_name: faf-db-migrations
-    image: taforever/taf-db-migrations:v119-taf
+    image: taforever/taf-db-migrations:v120-taf
     #build:
     #  context: ..\db
     #  dockerfile: Dockerfile
@@ -155,8 +155,8 @@ services:
   #
   faf-python-server:
     container_name: faf-python-server
-    #image: taforever/taf-python-server:v2022.11.13
-    image: taforever/taf-python-server:v2022.12.01
+    #image: taforever/taf-python-server:v2023.09.05
+    image: taforever/taf-python-server:v2023.09.12
     #build:
     #  context: ..\server
     #  dockerfile: Dockerfile
@@ -196,8 +196,8 @@ services:
   #
   faf-java-api:
     container_name: faf-java-api
-    #image: taforever/taf-java-api:v2022.11.04
-    image: taforever/taf-java-api:v2022.11.07
+    #image: taforever/taf-java-api:v2022.11.07
+    image: taforever/taf-java-api:v2023.08.29
     #build:
     #  context: ..\faf-java-api
     #  dockerfile: Dockerfile
@@ -244,10 +244,10 @@ services:
   #
   faf-website:
     container_name: faf-website
-    image: taforever/taf-website:v0.3
-    #build:
-    #  context: ..\website
-    #  dockerfile: Dockerfile
+    image: taforever/taf-website:v2024.01.06
+    build:
+      context: ../website
+      dockerfile: Dockerfile
     user: ${FAF_WEBSITE_USER}
     restart: unless-stopped
     env_file: ./config/faf-website/faf-website.env
@@ -466,6 +466,8 @@ services:
     restart: unless-stopped
     volumes:
       - ./data/content:/usr/share/nginx/html
+      - ./data/content/objstore/replays-000:/usr/share/nginx/html/replays/0/0/0
+      - ./data/content/objstore/replays-001:/usr/share/nginx/html/replays/0/0/1
     networks:
       - faf
     depends_on:
@@ -522,8 +524,8 @@ services:
   #
   taf-demo-compiler:
     container_name: taf-demo-compiler
-    #image: taforever/gpgnet4ta:v0.14.9
-    image: taforever/gpgnet4ta:2022.10.29
+    #image: taforever/gpgnet4ta:2022.10.29
+    image: taforever/taf-gpgnet4ta:v2023.12.03
     user: ${TAF_DEMO_COMPILER_USER}
     restart: unless-stopped
     volumes:
@@ -542,6 +544,11 @@ services:
       options:
         max-size: "${DEFAULT_LOG_SIZE}"
         max-file: "${DEFAULT_LOG_FILES}"
+    ulimits:
+      core:
+        soft: -1
+        hard: -1
+
 
   faf-policy-server:
     container_name: faf-policy-server
