@@ -82,6 +82,7 @@ services:
   #
   faf-db:
     container_name: faf-db
+    #image: mariadb:lts-noble
     image: mysql:5.7
     user: ${FAF_DB_USER}
     networks:
@@ -93,6 +94,7 @@ services:
     ports:
         - "127.0.0.1:3306:3306"
     volumes:
+      #- ./config/faf-db/mysqld.cnf:/etc/mysql/mariadb.conf.d/mysqld-custom.cnf
       - ./config/faf-db/mysqld.cnf:/etc/mysql/mysql.conf.d/mysqld-custom.cnf
       - ./config/faf-db/mysql.cnf:/root/.my.cnf
       - ./data/faf-db:/var/lib/mysql
@@ -107,13 +109,16 @@ services:
       options:
         max-size: "${DEFAULT_LOG_SIZE}"
         max-file: "${DEFAULT_LOG_FILES}"
+    #command: >
+    #      sh -c "chmod 644 /etc/mysql/mariadb.conf.d/mysqld-custom.cnf &&
+    #             mariadbd"
 
   #
   # FAF MySQL database migrations creates & updates the database tables and some required data
   #
   faf-db-migrations:
     container_name: faf-db-migrations
-    image: taforever/taf-db-migrations:v120-taf
+    image: taforever/taf-db-migrations:v122-taf
     #build:
     #  context: ..\db
     #  dockerfile: Dockerfile
@@ -155,8 +160,8 @@ services:
   #
   faf-python-server:
     container_name: faf-python-server
-    #image: taforever/taf-python-server:v2023.09.05
-    image: taforever/taf-python-server:v2023.09.12
+    #image: taforever/taf-python-server:v2024.03.16
+    image: taforever/taf-python-server:v2024.09.15
     #build:
     #  context: ..\server
     #  dockerfile: Dockerfile
@@ -196,8 +201,8 @@ services:
   #
   faf-java-api:
     container_name: faf-java-api
-    #image: taforever/taf-java-api:v2022.11.07
-    image: taforever/taf-java-api:v2023.08.29
+    #image: taforever/taf-java-api:v2024.3.17
+    image: taforever/taf-java-api:v2024.09.21
     #build:
     #  context: ..\faf-java-api
     #  dockerfile: Dockerfile
@@ -244,10 +249,11 @@ services:
   #
   faf-website:
     container_name: faf-website
-    image: taforever/taf-website:v2024.01.06
-    build:
-      context: ../website
-      dockerfile: Dockerfile
+    #image: taforever/taf-website:v2024.01.05b
+    image: taforever/taf-website:v2024.03.05
+    #build:
+    #  context: ..\website
+    #  dockerfile: Dockerfile
     user: ${FAF_WEBSITE_USER}
     restart: unless-stopped
     env_file: ./config/faf-website/faf-website.env
