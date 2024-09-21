@@ -21,5 +21,6 @@ function init_volume() {
 # Permissions could be set like this:
 
 # init_volume data/faf-db ${FAF_DB_USER}
+init_volume data/faf-db ${FAF_DB_USER}
 
 # But for now we don't mess with any permissions unless we know what we're doing

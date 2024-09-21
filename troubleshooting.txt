@@ -1,6 +1,6 @@
 ISSUE: locked out of database forgotten password
 RESOLUTION: https://linuxize.com/post/how-to-reset-a-mysql-root-password/
-  $ docker-compose run --rm faf-db mysqld_safe --skip-grant-tables
+  $ docker-compose run --rm faf-db mysqld(_safe) --skip-grant-tables
   $ docker exec -it 086dbd431f22 sh
   $$ mysql -u root
   $$$ update mysql.user set authentication_string = PASSWORD('banana') where account_locked='N';
@@ -13,6 +13,7 @@ RESOLUTION: reboot
 
 ISSUE: Access denied for user ‘root’@’localhost’
 RESOLUTION: dos2unix *EVERYTHING* including the .env files
+RESOLUTION: exec into the container and "chmod 644 /root/.my.cnf" (and /etc/mysql/mysql.conf.d/mysqld-custom.cnf too for good measure)
 
 
 ISSUE: players have no avataars
@@ -141,6 +142,11 @@ ISSUE: news tab never loads, eventually shows "bad gateway"
 CAUSES:
   - word-press not running
   - in taf-stack/config/faf-website.env: SP_NEWSHUB_CATEGORYID and WP_NEWSHUBARCHIVE_CATEGORYID need to be set to INTEGERS!! (not slug names!)
+
+
+ISSUE: news posts show on neighter client news tab nor taforever.com/newshub
+CAUSES:
+  - taf-stack/config/faf-website/faf-website.env: WP_NEWSHUB_CATEGORYID and WP_NEWSHUBARCHIVE_CATEGORY need to be set to wordpress category ids
 
 
 ISSUE: faf website download button doesn't pick up new release

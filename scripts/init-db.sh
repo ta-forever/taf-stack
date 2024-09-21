@@ -13,6 +13,8 @@ docker-compose up -d faf-db
 docker-compose logs -f faf-db &
 log_process_id=$!
 
+source config/faf-db/faf-db.env
+
 echo -n "Waiting for faf-db "
 current_wait=0
 while ! docker exec -i faf-db sh -c "mysqladmin ping -h 127.0.0.1 -uroot -p${MYSQL_ROOT_PASSWORD}" >/dev/null 2>&1
@@ -28,8 +30,6 @@ done
 
 kill -TERM ${log_process_id}
 
-
-source config/faf-db/faf-db.env
 
 create() {
   database=$1
